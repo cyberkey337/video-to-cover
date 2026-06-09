@@ -1,39 +1,8 @@
-import streamlit as st
-import cv2
-import numpy as np
-from PIL import Image, ImageDraw, ImageFont
-import io
-from groq import Groq
-
-st.set_page_config(page_title="AI Smart Drama Poster", page_icon="🎬", layout="centered")
-
-st.title("🎬 AI Smart Drama Poster Generator")
-st.write("ဗီဒီယို တင်ပေးရုံဖြင့် AI က ဇာတ်ကောင်များကို ရွေးချယ်ပြီး ဆွဲဆောင်မှုရှိသော ပိုစတာကို စာသားနှင့်တကွ ဖန်တီးပေးမည့် စနစ်")
-
-# --- SIDEBAR: SETTINGS ---
-st.sidebar.header("⚙️ API Configuration")
-groq_api_key = st.sidebar.text_input("Groq API Key", type="password", placeholder="gsk_...")
-
-text_option = st.sidebar.radio("စာသား ထည့်သွင်းမှုပုံစံ", ["AI ကို အလိုအလျောက် စဉ်းစားခိုင်းမည်", "ကိုယ်တိုင် စိတ်ကြိုက်ရေးမည်"])
-custom_title = ""
-if text_option == "ကိုယ်တိုင် စိတ်ကြိုက်ရေးမည်":
-    custom_title = st.sidebar.text_input("ထည့်ချင်သည့် စာသား ရေးပါ", value="သွေးသားရင်းတို့ ဆုံစည်းရာ")
-
-text_color = st.sidebar.color_picker("စာသားအရောင်", "#FFD700") # ရွှေရောင်
-
-# --- MAIN WORKFLOW ---
-uploaded_video = st.file_uploader("MP4 ဗီဒီယိုဖိုင် တင်ပါ", type=["mp4"])
-
-if uploaded_video is not None:
-    with open("temp_movie.mp4", "wb") as f:
-        f.write(uploaded_video.read())
-        
-    st.info("🤖 AI က ဗီဒီယိုထဲမှ အကောင်းဆုံး ဇာတ်ကွက်များနှင့် ဇာတ်ကောင်များကို ရှာဖွေနေပါသည်...")
-    
-    # OpenCV ဖြင့် ဗီဒီယိုထဲမှ Frame များကို စနစ်တကျ ထုတ်ယူခြင်း
-    cap = cv2.VideoCapture("temp_movie.mp4")
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    
+streamlit
+opencv-python-headless
+Pillow
+numpy
+groq==0.5.0
     # မတူညီသော အခန်းကဏ္ဍများ ရရှိရန် အစ၊ အလယ်၊ အဆုံး Frame များကို ယူခြင်း
     sample_indices = np.linspace(int(total_frames*0.1), int(total_frames*0.9), 4, dtype=int)
     frames_list = []
