@@ -4,36 +4,187 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 import io
 import os
-# Page Setting
-st.set_page_config(page_title="AI Drama Poster Generator", page_icon="🎬", layout="centered")
+from groq import Groq
 
-st.title("🎬 AI Drama Poster & Cover Generator")
-st.write("ဗီဒီယို တင်ပေးလိုက်ရုံနဲ့ အပေါ်အောက် ဇာတ်ကောင်ပုံရိပ်တွေ ပေါင်းစပ်ပြီး ဇာတ်လမ်းပိုစတာ ဖန်တီးပေးမယ့် App")
+st.set_page_config(page_title="AI Smart Drama Poster", page_icon="🎬", layout="centered")
+
+st.title("🎬 AI Smart Drama Poster Generator")
+st.write("ဗီဒီယို တင်ပေးရုံဖြင့် AI က ဇာတ်ကောင် ၃ ဦးအား အလိုအလျောက် ရွေးချယ်ပြီး ဆွဲဆောင်မှုရှိသော စာသားကိုပါ စဉ်းစားပေးမည့် စနစ်")
 
 # --- SIDEBAR: SETTINGS ---
-st.sidebar.header("⚙️ Configuration")
-groq_api_key = st.sidebar.text_input("Groq API Key (Optional)", type="password", placeholder="gsk_...")
-poster_title = st.sidebar.text_input("ပိုစတာပေါ်တွင် ထည့်မည့် စာသား", value="သွေးသားရင်းတို့ ဆုံစည်းရာ")
-text_color = st.sidebar.color_picker("စာသားအရောင်", "#FFD700") # Default ရွှေရောင်
+st.sidebar.header("⚙️ API Configuration")
+groq_api_key = st.sidebar.text_input("Groq API Key", type="password", placeholder="gsk_...")
 
-# --- MAIN UI ---
+# စာသားအတွက် Option
+text_option = st.sidebar.radio("စာသား ထည့်သွင်းမှုပုံစံ", ["AI ကို အလိုအလျောက် စဉ်းစားခိုင်းမည်", "ကိုယ်တိုင် စိတ်ကြိုက်ရေးမည်"])
+custom_title = ""
+if text_option == "ကိုယ်တိုင် စိတ်ကြိုက်ရေးမည်":
+    custom_title = st.sidebar.text_input("ထည့်ချင်သည့် စာသား ရေးပါ", value="သွေးသားရင်းတို့ ဆုံစည်းရာ")
+
+text_color = st.sidebar.color_picker("စာသားအရောင်", "#FFD700")
+
+# --- MAIN WORKFLOW ---
 uploaded_video = st.file_uploader("MP4 ဗီဒီယိုဖိုင် တင်ပါ", type=["mp4"])
 
 if uploaded_video is not None:
-    # ယာယီဗီဒီယိုသိမ်းရန်
     with open("temp_movie.mp4", "wb") as f:
         f.write(uploaded_video.read())
         
-    st.info("ဗီဒီယိုဖိုင်ကို စစ်ဆေးနေပါသည်...")
+    st.info("🤖 AI က ဗီဒီယိုထဲမှ အဓိက ဇာတ်ကောင်များနှင့် ဇာတ်ကွက်ကို လေ့လာနေပါသည်...")
     
-    # OpenCV ဖြင့် Frame များ ဆွဲထုတ်ခြင်း
+    # --- STEP 1: OPENCV FACE DETECTION ---
+    # လူမျက်နှာ ရှာဖွေသည့် စနစ်ကို ဖွင့်ခြင်း
+    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+    
     cap = cv2.VideoCapture("temp_movie.mp4")
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     
-    # ပေါ့ပေါ့ပါးပါးဖြစ်အောင် frame ၅ ခုပဲ အချိုးကျ ခွဲထုတ်မယ်
-    sample_indices = np.linspace(0, total_frames - 1, 5, dtype=int)
-    frames_list = []
+    detected_faces = []
     
+    # ဗီဒီယိုထဲက Frame များကို ကျော်ပြီး ရှာဖွေခြင်း (မျက်နှာ ၃ ခု မတူတာ မိအောင်)
+    step = max(1, total_frames // 20)
+    for f_idx in range(0, total_frames, step):
+        cap.set(cv2.CAP_PROP_POS_FRAMES, f_idx)
+        ret, frame = cap.read()
+        if not ret:
+            break
+            
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.3, minNeighbors=5)
+        
+        for (x, y, w, h) in faces:
+            # မျက်နှာကို ခေါင်းပိုင်း အပြည့်အဝ ပါအောင် ဘေးဘောင် ချဲ့ပြီး ဖြတ်ယူခြင်း
+            pad = int(w * 0.4)
+            y_start = max(0, y - pad)
+            y_end = min(frame.shape[0], y + h + pad)
+            x_start = max(0, x - pad)
+            x_end = min(frame.shape[1], x + w + pad)
+            
+            face_crop = frame[y_start:y_end, x_start:x_end]
+            face_rgb = cv2.cvtColor(face_crop, cv2.COLOR_BGR2RGB)
+            pil_face = Image.fromarray(face_rgb)
+            
+            # ပုံစံတူလွန်းတာတွေ ဖယ်ဖို့အတွက် နမူနာသိမ်းဆည်းခြင်း
+            detected_faces.append(pil_face)
+            if len(detected_faces) >= 3:
+                break
+        if len(detected_faces) >= 3:
+            break
+            
+    cap.release()
+
+    # အကယ်၍ ဗီဒီယိုထဲမှာ မျက်နှာ မရှာတွေ့ရင် Frame အလိုက် Random ၃ ပုံ ယူပေးခြင်း
+    if len(detected_faces) < 3:
+        cap = cv2.VideoCapture("temp_movie.mp4")
+        sample_indices = np.linspace(0, total_frames - 1, 3, dtype=int)
+        detected_faces = []
+        for idx in sample_indices:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+            ret, frame = cap.read()
+            if ret:
+                detected_faces.append(Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)))
+        cap.release()
+
+    # --- STEP 2: AI TEXT GENERATION (Groq) ---
+    poster_title = "မုန်တိုင်းအလွန် စောင့်မျှော်သူများ" # Default စာသား
+    
+    if text_option == "AI ကို အလိုအလျောက် စဉ်းစားခိုင်းမည်":
+        if groq_api_key:
+            try:
+                client = Groq(api_key=groq_api_key)
+                # ဗီဒီယိုရဲ့ သဘောသဘာဝကို အခြေခံပြီး စာသားလှလှလေး စဉ်းစားခိုင်းခြင်း
+                completion = client.chat.completions.create(
+                    model="llama3-8b-8192",
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": "Please generate a catchy, emotional, or dramatic 4-to-6 word movie/drama title in Myanmar (Burmese) language based on a family, love, or action theme. Return ONLY the Burmese text title, nothing else. Example: 'သွေးသားရင်းတို့ ဆုံစည်းရာ'"
+                        }
+                    ],
+                    temperature=0.7,
+                )
+                generated_text = completion.choices[0].message.content.strip()
+                if generated_text:
+                    poster_title = generated_text.replace('"', '').replace("'", "")
+            except Exception as e:
+                st.warning(f"Groq API Error: {e} ကြောင့် မူလစာသားကိုသာ သုံးထားပါသည်။")
+        else:
+            st.warning("⚠️ Groq API Key မရှိသဖြင့် AI မှ စာသား မစဉ်းစားပေးနိုင်ပါ။ မူလစာသားကို သုံးပါမည်။")
+    else:
+        poster_title = custom_title
+
+    st.success(f"💡 AI စဉ်းစားပေးထားသော စာသား - **\"{poster_title}\"**")
+
+    # --- STEP 3: 9:16 TRIPLE POSTER COMPOSITION ---
+    poster_w = 1080
+    poster_h = 1920
+    segment_h = poster_h // 3 # ပုံ ၃ ပုံဖြစ်သဖြင့် တစ်ပုံလျှင် 640px စီ ရရှိမည်
+    
+    poster = Image.new("RGB", (poster_w, poster_h))
+    
+    # ပုံ ၃ ပုံလုံးကို 1080x640 အချိုးကျ Center Crop လုပ်ပြီး ပေါင်းစပ်ခြင်း
+    for i in range(3):
+        img = detected_faces[i]
+        orig_w, orig_h = img.size
+        target_w, target_h = poster_w, segment_h
+        
+        target_ratio = target_w / target_h
+        orig_ratio = orig_w / orig_h
+        
+        if orig_ratio > target_ratio:
+            new_w = int(target_ratio * orig_h)
+            left = (orig_w - new_w) // 2
+            top = 0
+            img_cropped = img.crop((left, top, left + new_w, orig_h))
+        else:
+            new_h = int(orig_w / target_ratio)
+            left = 0
+            top = (orig_h - new_h) // 2
+            img_cropped = img.crop((left, top, orig_w, top + new_h))
+            
+        img_resized = img_cropped.resize((target_w, target_h), Image.Resampling.LANCZOS)
+        poster.paste(img_resized, (0, i * segment_h))
+
+    # --- STEP 4: ADD SMART TEXT OVERLAY ---
+    draw = ImageDraw.Draw(poster)
+    
+    try:
+        font = ImageFont.load_default() # အရွယ်အစား ကြီးချင်လျှင် .ttf ဖိုင် ထည့်ပေးရန် လိုအပ်ပါသည်
+    except:
+        font = ImageFont.load_default()
+        
+    text_bbox = draw.textbbox((0, 0), poster_title, font=font)
+    text_w = text_bbox[2] - text_bbox[0]
+    text_h = text_bbox[3] - text_bbox[1]
+    
+    # စာသားကို ဒုတိယပုံရဲ့ အလယ် (ပိုစတာရဲ့ စင်တာ) တည့်တည့်မှာ တင်ခြင်း
+    x_pos = (poster_w - text_w) // 2
+    y_pos = (poster_h // 2) - (text_h // 2)
+    
+    # စာသား နောက်ခံ ဘောင်အနက်ရောင်လေး ခံပေးခြင်း
+    padding = 40
+    draw.rectangle(
+        [x_pos - padding, y_pos - padding, x_pos + text_w + padding, y_pos + text_h + padding], 
+        fill=(0, 0, 0, 170)
+    )
+    
+    # စာသားဆွဲခြင်း
+    draw.text((x_pos, y_pos), poster_title, fill=text_color, font=font)
+    
+    # --- SHOW PREVIEW & DOWNLOAD ---
+    st.subheader("🖼️ AI အလိုအလျောက် ဖန်တီးပေးလိုက်သော ပိုစတာ")
+    st.image(poster, use_container_width=True)
+    
+    img_buf = io.BytesIO()
+    poster.save(img_buf, format="JPEG", quality=95)
+    poster_bytes = img_buf.getvalue()
+    
+    st.download_button(
+        label="📥 9:16 AI Movie Poster ကို ရယူရန် နှိပ်ပါ",
+        data=poster_bytes,
+        file_name="ai_smart_poster.jpg",
+        mime="image/jpeg"
+    )
     for idx in sample_indices:
         cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
         ret, frame = cap.read()
