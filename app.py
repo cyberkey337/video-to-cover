@@ -6,19 +6,18 @@ import io
 import os
 from groq import Groq
 
-st.set_page_config(page_title="AI Smart Drama Poster", page_icon="🎬", layout="centered")
-
+st.set_page_config(page_title="AI Poster", page_icon="🎬", layout="centered")
 st.title("🎬 AI Smart Drama Poster Generator")
-st.write("ဗီဒီယို တင်ပေးရုံဖြင့် AI က ဇာတ်ကောင်များကို ရွေးချယ်ပြီး ဆွဲဆောင်မှုရှိသော ပိုစတာကို စာသားနှင့်တကွ ဖန်တီးပေးမည့် စနစ်")
+st.write("ဗီဒီယို တင်ပေးရုံဖြင့် AI က ပိုစတာ ဖန်တီးပေးမည့် စနစ်")
 
-# --- SIDEBAR: SETTINGS ---
-st.sidebar.header("⚙️ API Configuration")
+# --- SIDEBAR ---
+st.sidebar.header("⚙️ Settings")
 groq_api_key = st.sidebar.text_input("Groq API Key", type="password", placeholder="gsk_...")
+text_option = st.sidebar.radio("စာသားပုံစံ", ["AI ကို စဉ်းစားခိုင်းမည်", "ကိုယ်တိုင်ရေးမည်"])
 
-text_option = st.sidebar.radio("စာသား ထည့်သွင်းမှုပုံစံ", ["AI ကို အလိုအလျောက် စဉ်းစားခိုင်းမည်", "ကိုယ်တိုင် စိတ်ကြိုက်ရေးမည်"])
 custom_title = ""
-if text_option == "ကိုယ်တိုင် စိတ်ကြိုက်ရေးမည်":
-    custom_title = st.sidebar.text_input("ထည့်ချင်သည့် စာသား ရေးပါ", value="သွေးသားရင်းတို့ ဆုံစည်းရာ")
+if text_option == "ကိုယ်တိုင်ရေးမည်":
+    custom_title = st.sidebar.text_input("စာသား ရေးပါ", value="သွေးသားရင်းတို့ ဆုံစည်းရာ")
 
 text_color = st.sidebar.color_picker("စာသားအရောင်", "#FFD700")
 
@@ -29,11 +28,10 @@ if uploaded_video is not None:
     with open("temp_movie.mp4", "wb") as f:
         f.write(uploaded_video.read())
         
-    st.info("🤖 AI က ဗီဒီယိုထဲမှ အကောင်းဆုံး ဇာတ်ကွက်များနှင့် ဇာတ်ကောင်များကို ရှာဖွေနေပါသည်...")
+    st.info("🤖 AI က ဗီဒီယိုထဲမှ Frame များကို ထုတ်ယူနေပါသည်...")
     
     cap = cv2.VideoCapture("temp_movie.mp4")
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    
     sample_indices = np.linspace(int(total_frames*0.1), int(total_frames*0.9), 4, dtype=int)
     frames_list = []
     
@@ -43,42 +41,35 @@ if uploaded_video is not None:
         if ret:
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             frames_list.append(Image.fromarray(frame_rgb))
-            
     cap.release()
 
     if len(frames_list) >= 3:
         poster_title = "သွေးသားရင်းတို့ ဆုံစည်းရာ"
         
-        if text_option == "AI ကို အလိုအလျောက် စဉ်းစားခိုင်းမည်":
+        if text_option == "AI ကို စဉ်းစားခိုင်းမည်":
             if groq_api_key:
                 try:
                     client = Groq(api_key=groq_api_key)
                     completion = client.chat.completions.create(
                         model="llama3-8b-8192",
-                        messages=[
-                            {
-                                "role": "user",
-                                "content": "Please generate a catchy, emotional, or dramatic 4-to-6 word movie/drama title in Myanmar (Burmese) language. Return ONLY the Burmese text title, nothing else."
-                            }
-                        ],
+                        messages=[{"role": "user", "content": "Generate a 4-word dramatic Burmese drama title. Return ONLY Burmese text."}],
                         temperature=0.7,
                     )
                     generated_text = completion.choices[0].message.content.strip()
                     if generated_text:
                         poster_title = generated_text.replace('"', '').replace("'", "")
                 except Exception as e:
-                    st.warning(f"Groq API Error: {e} ကြောင့် မူလစာသားကိုသာ သုံးထားပါသည်။")
+                    st.warning(f"API Error: {e}")
             else:
-                st.warning("⚠️ Groq API Key မရှိသဖြင့် AI မှ စာသား မစဉ်းစားပေးနိုင်ပါ။ မူလစာသားကို သုံးပါမည်။")
+                st.warning("⚠️ API Key မရှိသဖြင့် မူလစာသားကို သုံးပါမည်။")
         else:
             poster_title = custom_title
 
-        st.success(f"💡 AI စဉ်းစားပေးထားသော စာသား - **\"{poster_title}\"**")
+        st.success(f"💡 စာသား - **\"{poster_title}\"**")
 
-        poster_w = 1080
-        poster_h = 1920
+        # --- POSTER COMPOSITION (1080 x 1920) ---
+        poster_w, poster_h = 1080, 1920
         half_h = poster_h // 2
-        
         poster = Image.new("RGB", (poster_w, poster_h), (0,0,0))
         
         def crop_to_ratio(img, target_w, target_h):
@@ -102,6 +93,7 @@ if uploaded_video is not None:
         poster.paste(top_right, (poster_w // 2, 0))
         poster.paste(bottom_full, (0, half_h))
         
+        # --- DRAW TEXT ---
         draw = ImageDraw.Draw(poster)
         font = ImageFont.load_default()
             
@@ -112,14 +104,26 @@ if uploaded_video is not None:
         x_pos = (poster_w - text_w) // 2
         y_pos = half_h - (text_h // 2)
         
-        padding_w, padding_h = 50, 30
-        draw.rectangle(
-            [x_pos - padding_w, y_pos - padding_h, x_pos + text_w + padding_w, y_pos + text_h + padding_h], 
-            fill=(0, 0, 0, 180)
-        )
-        
+        draw.rectangle([x_pos-50, y_pos-30, x_pos+text_w+50, y_pos+text_h+30], fill=(0,0,0,180))
         draw.text((x_pos, y_pos), poster_title, fill=text_color, font=font)
         
-        st.subheader("🖼️ AI အလိုအလျောက် ဖန်တီးပေးလိုက်သော ပိုစတာ")
-        st.image(poster, use_
+        # --- PREVIEW & DOWNLOAD ---
+        st.subheader("🖼️ AI Generated Poster")
+        st.image(poster, use_container_width=True)
+        
+        img_buf = io.BytesIO()
+        poster.save(img_buf, format="JPEG", quality=95)
+        poster_bytes = img_buf.getvalue()
+        
+        st.download_button(
+            label="📥 9:16 Movie Poster ဒေါင်းလုဒ်ဆွဲရန်",
+            data=poster_bytes,
+            file_name="ai_poster.jpg",
+            mime="image/jpeg"
+        )
+        
+        if os.path.exists("temp_movie.mp4"):
+            os.remove("temp_movie.mp4")
+    else:
+        st.error("ဗီဒီယိုဖိုင်မှ ပုံရိပ်လုံလောက်စွာ ထုတ်ယူ၍ မရပါ။")
         
