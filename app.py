@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 import io
-
+import os
 # Page Setting
 st.set_page_config(page_title="AI Drama Poster Generator", page_icon="🎬", layout="centered")
 
