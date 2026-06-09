@@ -1,39 +1,112 @@
 import streamlit as st
 import cv2
-from PIL import Image, ImageDraw, ImageFont
 import numpy as np
+from PIL import Image, ImageDraw, ImageFont
 import io
 
-# Page Configuration
-st.set_page_config(page_title="TikTok Cover Generator", page_icon="🎬", layout="centered")
+# Page Setting
+st.set_page_config(page_title="AI Drama Poster Generator", page_icon="🎬", layout="centered")
 
-st.title("🎬 TikTok Video Cover Generator")
-st.write("MP4 ဗီဒီယိုထဲကနေ လှပတဲ့ TikTok Cover (9:16) ပုံရိပ်တွေ ဖန်တီးပေးမယ့် App ဖြစ်ပါတယ်။")
+st.title("🎬 AI Drama Poster & Cover Generator")
+st.write("ဗီဒီယို တင်ပေးလိုက်ရုံနဲ့ အပေါ်အောက် ဇာတ်ကောင်ပုံရိပ်တွေ ပေါင်းစပ်ပြီး ဇာတ်လမ်းပိုစတာ ဖန်တီးပေးမယ့် App")
 
-# --- SIDEBAR: API & Settings ---
-st.sidebar.header("⚙️ Settings")
-# Groq API Key Space (ဖော်ပြပါ လုပ်ဆောင်ချက်အတွက် လောလောဆယ် API မလိုသော်လည်း တောင်းဆိုချက်အရ ထည့်သွင်းပေးထားပါသည်)
-groq_api_key = st.sidebar.text_input("Groq API Key", type="password", placeholder="gsk_...")
-if groq_api_key:
-    st.sidebar.success("Groq API Key ထည့်သွင်းပြီးပါပြီ။")
+# --- SIDEBAR: SETTINGS ---
+st.sidebar.header("⚙️ Configuration")
+groq_api_key = st.sidebar.text_input("Groq API Key (Optional)", type="password", placeholder="gsk_...")
+poster_title = st.sidebar.text_input("ပိုစတာပေါ်တွင် ထည့်မည့် စာသား", value="သွေးသားရင်းတို့ ဆုံစည်းရာ")
+text_color = st.sidebar.color_picker("စာသားအရောင်", "#FFD700") # Default ရွှေရောင်
 
-# အလယ်မှာ ထည့်ချင်တဲ့ စာသား
-cover_text = st.sidebar.text_input("Cover ပေါ်တွင် ထည့်လိုသည့် စာသား", value="Amazing Video!")
-text_color = st.sidebar.color_picker("စာသား အရောင်", "#FFFFFF")
+# --- MAIN UI ---
+uploaded_video = st.file_uploader("MP4 ဗီဒီယိုဖိုင် တင်ပါ", type=["mp4"])
 
-st.sidebar.markdown("---")
-st.sidebar.info("Note: ဗီဒီယိုဖိုင် အရွယ်အစားကြီးလျှင် Processing လုပ်ရန် အနည်းငယ် ကြာနိုင်ပါသည်။")
-
-# --- MAIN UI: File Uploader ---
-uploaded_file = st.file_uploader("MP4 ဗီဒီယိုဖိုင် တင်ပါ", type=["mp4"])
-
-if uploaded_file is not None:
-    # ဗီဒီယိုဖိုင်ကို ယာယီသိမ်းဆည်းခြင်း
-    with open("temp_video.mp4", "wb") as f:
-        f.write(uploaded_file.read())
+if uploaded_video is not None:
+    # ယာယီဗီဒီယိုသိမ်းရန်
+    with open("temp_movie.mp4", "wb") as f:
+        f.write(uploaded_video.read())
+        
+    st.info("ဗီဒီယိုဖိုင်ကို စစ်ဆေးနေပါသည်...")
     
-    st.success("ဗီဒီယို Upload တင်ခြင်း အောင်မြင်ပါသည်။")
+    # OpenCV ဖြင့် Frame များ ဆွဲထုတ်ခြင်း
+    cap = cv2.VideoCapture("temp_movie.mp4")
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     
+    # ပေါ့ပေါ့ပါးပါးဖြစ်အောင် frame ၅ ခုပဲ အချိုးကျ ခွဲထုတ်မယ်
+    sample_indices = np.linspace(0, total_frames - 1, 5, dtype=int)
+    frames_list = []
+    
+    for idx in sample_indices:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+        ret, frame = cap.read()
+        if ret:
+            # Server မဒေါင်းအောင် ပုံစိုက်ကို အနည်းငယ် လျှော့ချဖတ်မယ်
+            frame = cv2.resize(frame, (640, 360))
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frames_list.append(Image.fromarray(frame_rgb))
+            
+    cap.release()
+
+    if len(frames_list) >= 2:
+        st.warning("⚠️ ဗီဒီယိုထဲက ပုံများကို အောက်ပါ Slider ဖြင့် စိတ်ကြိုက် ရွေးချယ်ပေးပါ။")
+        top_idx = st.slider("အပေါ်ပိုင်း (ဇာတ်ကောင်ပုံ) အတွက် Frame ရွေးပါ", 0, len(frames_list)-1, 1)
+        bottom_idx = st.slider("အောက်ပိုင်း (နောက်ခံဇာတ်ကွက်) အတွက် Frame ရွေးပါ", 0, len(frames_list)-1, 3)
+        top_img = frames_list[top_idx]
+        bottom_img = frames_list[bottom_idx]
+
+        # --- 9:16 ပိုစတာ ပေါင်းစပ်ဖန်တီးခြင်း ---
+        poster_w, poster_h = 720, 1280  # ဖုန်းအတွက် အဆင်ပြေမယ့် ပေါ့ပါးတဲ့ 9:16 ဆိုဒ်
+        half_h = poster_h // 2
+        
+        top_resized = top_img.resize((poster_w, half_h), Image.Resampling.LANCZOS)
+        bottom_resized = bottom_img.resize((poster_w, half_h), Image.Resampling.LANCZOS)
+        
+        poster = Image.new("RGB", (poster_w, poster_h))
+        poster.paste(top_resized, (0, 0))
+        poster.paste(bottom_resized, (0, half_h))
+        
+        # --- အလယ်မြှုပ်ကြောင်း (Blending Effect) ---
+        # မှုန်ဝါးဝါး Gradient လေးဖြင့် ပုံနှစ်ပုံကြား ဆက်ကြောင်းကို ဖျောက်ခြင်း
+        mask = Image.new("L", (poster_w, poster_h), 255)
+        mask_draw = ImageDraw.Draw(mask)
+        for y in range(half_h - 80, half_h + 80):
+            alpha = int((y - (half_h - 80)) / 160 * 255)
+            mask_draw.line([(0, y), (poster_w, y)], fill=alpha)
+            
+        # --- စာသား ထည့်သွင်းခြင်း ---
+        text_draw = ImageDraw.Draw(poster)
+        font = ImageFont.load_default() # စက်တိုင်းအလုပ်လုပ်မယ့် ပုံသေ Font
+
+        # စာသား တည့်တည့်တွက်ချက်ခြင်း
+        text_bbox = text_draw.textbbox((0, 0), poster_title, font=font)
+        text_w = text_bbox[2] - text_bbox[0]
+        text_h = text_bbox[3] - text_bbox[1]
+        
+        x_pos = (poster_w - text_w) // 2
+        y_pos = half_h - (text_h // 2)
+        
+        # စာသား နောက်ခံ အရိပ်လိုင်း (Shadow effect)
+        text_draw.text((x_pos+2, y_pos+2), poster_title, fill="#000000", font=font)
+        text_draw.text((x_pos, y_pos), poster_title, fill=text_color, font=font)
+        
+        # --- Preview & Download ---
+        st.subheader("🖼️ ထွက်လာမည့် AI Drama Poster Preview")
+        st.image(poster, use_container_width=True)
+        
+        img_buf = io.BytesIO()
+        poster.save(img_buf, format="JPEG", quality=90)
+        poster_bytes = img_buf.getvalue()
+        
+        st.download_button(
+            label="📥 9:16 Movie Poster ကို ဒေါင်းလုဒ်ဆွဲရန် နှိပ်ပါ",
+            data=poster_bytes,
+            file_name="ai_drama_poster.jpg",
+            mime="image/jpeg"
+        )
+        
+        # ယာယီဖိုင်အား ဖျက်သိမ်းခြင်း
+        if os.path.exists("temp_movie.mp4"):
+            os.remove("temp_movie.mp4")
+    else:
+        st.error("ဗီဒီယိုဖိုင်မှ ပုံရိပ်များ ထုတ်ယူ၍ မရပါ။")
     # OpenCV ဖြင့် ဗီဒီယိုကို ဖတ်ခြင်း
     video = cv2.VideoCapture("temp_video.mp4")
     total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
